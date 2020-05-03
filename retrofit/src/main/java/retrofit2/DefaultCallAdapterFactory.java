@@ -25,6 +25,9 @@ import javax.annotation.Nullable;
 import okhttp3.Request;
 import okio.Timeout;
 
+/**
+ * 默认发送请求的地方
+ */
 final class DefaultCallAdapterFactory extends CallAdapter.Factory {
   private final @Nullable Executor callbackExecutor;
 
@@ -35,15 +38,18 @@ final class DefaultCallAdapterFactory extends CallAdapter.Factory {
   @Override
   public @Nullable CallAdapter<?, ?> get(
       Type returnType, Annotation[] annotations, Retrofit retrofit) {
+    //返回类型必须是Call，也就是说这个CallAdapter对应的返回类型是Call
     if (getRawType(returnType) != Call.class) {
       return null;
     }
+    //返回类型必须是Call<Foo>的形式，也就是必须带有泛型参数
     if (!(returnType instanceof ParameterizedType)) {
       throw new IllegalArgumentException(
           "Call return type must be parameterized as Call<Foo> or Call<? extends Foo>");
     }
     final Type responseType = Utils.getParameterUpperBound(0, (ParameterizedType) returnType);
 
+    //某个方法有没有声明@SkipCallbackExecutor注解
     final Executor executor =
         Utils.isAnnotationPresent(annotations, SkipCallbackExecutor.class)
             ? null
@@ -55,6 +61,11 @@ final class DefaultCallAdapterFactory extends CallAdapter.Factory {
         return responseType;
       }
 
+      /**
+       * 如果设置了executor，默认其实就是返回一个call，然后让用户自己去发请求，同步或者异步
+       * @param call
+       * @return
+       */
       @Override
       public Call<Object> adapt(Call<Object> call) {
         return executor == null ? call : new ExecutorCallbackCall<>(executor, call);
@@ -62,6 +73,11 @@ final class DefaultCallAdapterFactory extends CallAdapter.Factory {
     };
   }
 
+  /**
+   * 在用户没有设置CallAdapter的时候，系统默认的CallAdapter就是这个
+   * 这个类只是对结果进行了主线程的切换，也就是说系统默认的executor是MainLooper
+   * @param <T>
+   */
   static final class ExecutorCallbackCall<T> implements Call<T> {
     final Executor callbackExecutor;
     final Call<T> delegate;

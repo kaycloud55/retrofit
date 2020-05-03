@@ -50,28 +50,27 @@ import retrofit2.http.Url;
  *
  * <p>For example,
  *
- * <pre><code>
  * Retrofit retrofit = new Retrofit.Builder()
  *     .baseUrl("https://api.example.com/")
  *     .addConverterFactory(GsonConverterFactory.create())
  *     .build();
  *
  * MyApi api = retrofit.create(MyApi.class);
- * Response&lt;User&gt; user = api.getUser().execute();
- * </code></pre>
+ * Response<User> user = api.getUser().execute();
  *
  * @author Bob Lee (bob@squareup.com)
  * @author Jake Wharton (jw@squareup.com)
  */
 public final class Retrofit {
+  //网络请求的配置对象，存储网络请求相关的配置，如网络请求的方法、数据转换器、网络请求适配器、网络请求工厂、基地址等。
   private final Map<Method, ServiceMethod<?>> serviceMethodCache = new ConcurrentHashMap<>();
 
   final okhttp3.Call.Factory callFactory;
   final HttpUrl baseUrl;
   final List<Converter.Factory> converterFactories;
   final List<CallAdapter.Factory> callAdapterFactories;
-  final @Nullable Executor callbackExecutor;
-  final boolean validateEagerly;
+  final @Nullable Executor callbackExecutor; //onResponse、onError回调执行的线程池
+  final boolean validateEagerly; //是否要提前验证并解析method
 
   Retrofit(
       okhttp3.Call.Factory callFactory,
@@ -89,60 +88,46 @@ public final class Retrofit {
   }
 
   /**
-   * Create an implementation of the API endpoints defined by the {@code service} interface.
    *
-   * <p>The relative path for a given method is obtained from an annotation on the method describing
-   * the request type. The built-in methods are {@link retrofit2.http.GET GET}, {@link
-   * retrofit2.http.PUT PUT}, {@link retrofit2.http.POST POST}, {@link retrofit2.http.PATCH PATCH},
-   * {@link retrofit2.http.HEAD HEAD}, {@link retrofit2.http.DELETE DELETE} and {@link
-   * retrofit2.http.OPTIONS OPTIONS}. You can use a custom HTTP method with {@link HTTP @HTTP}. For
-   * a dynamic URL, omit the path on the annotation and annotate the first parameter with {@link
-   * Url @Url}.
+   * 创建用户定义的Service的具体实现；
    *
-   * <p>Method parameters can be used to replace parts of the URL by annotating them with {@link
-   * retrofit2.http.Path @Path}. Replacement sections are denoted by an identifier surrounded by
-   * curly braces (e.g., "{foo}"). To add items to the query string of a URL use {@link
-   * retrofit2.http.Query @Query}.
+   * 给定方法的相对路径是从描述请求类型的方法的注释中获得的。
+   * 内置方法是GET，PUT，POST，PATCH，HEAD，DELETE和OPTIONS。
+   * 您可以将自定义HTTP方法与@HTTP一起使用。
+   * 对于动态URL，请省略注释上的路径，并使用@Url注释第一个参数。
    *
-   * <p>The body of a request is denoted by the {@link retrofit2.http.Body @Body} annotation. The
-   * object will be converted to request representation by one of the {@link Converter.Factory}
-   * instances. A {@link RequestBody} can also be used for a raw representation.
+   * 方法参数可以通过使用@Path注释来替换URL的一部分。替换部分由用花括号括起来的标识符（例如“ {foo}”）表示。要将项目添加到URL的查询字符串中，请使用@Query。
    *
-   * <p>Alternative request body formats are supported by method annotations and corresponding
-   * parameter annotations:
+   * 请求的主体由@Body注释表示。该对象将通过Converter.Factory实例之一转换为请求表示形式。RequestBody也可以用于原始表示。
    *
-   * <ul>
-   *   <li>{@link retrofit2.http.FormUrlEncoded @FormUrlEncoded} - Form-encoded data with key-value
-   *       pairs specified by the {@link retrofit2.http.Field @Field} parameter annotation.
-   *   <li>{@link retrofit2.http.Multipart @Multipart} - RFC 2388-compliant multipart data with
-   *       parts specified by the {@link retrofit2.http.Part @Part} parameter annotation.
-   * </ul>
+   * 方法注释和相应的参数注释支持其他请求主体格式：
    *
-   * <p>Additional static headers can be added for an endpoint using the {@link
-   * retrofit2.http.Headers @Headers} method annotation. For per-request control over a header
-   * annotate a parameter with {@link Header @Header}.
+   *    * {@link retrofit2.http.FormUrlEncoded} - 具有@Field参数批注指定的键/值对的表单编码数据。
+   *    * {@link retrofit2.http.Multipart} - 符合RFC 2388的multi part数据，其部分由@Part参数注释指定。
    *
-   * <p>By default, methods return a {@link Call} which represents the HTTP request. The generic
-   * parameter of the call is the response body type and will be converted by one of the {@link
-   * Converter.Factory} instances. {@link ResponseBody} can also be used for a raw representation.
-   * {@link Void} can be used if you do not care about the body contents.
+   * 可以使用@Headers方法注释为请求添加其他静态headers。对于每个请求的header控制，请使用@Header注释参数。
    *
-   * <p>For example:
+   * 默认情况下，开发者在interface中定义的方法返回代表HTTP请求的{@link Call}
    *
-   * <pre>
+   * Call的泛型参数是响应体的具体类型，并将由Converter.Factory实例之一进行转换。也可以用ResponseBody表示原始的响应类型。
+   * 如果不关心响应内容，可以使用Void
+   *
+   * 例如：
    * public interface CategoryService {
-   *   &#64;POST("category/{cat}/")
-   *   Call&lt;List&lt;Item&gt;&gt; categoryList(@Path("cat") String a, @Query("page") int b);
+   *   @POST("category/{cat}/")
+   *   Call<List<Item>> categoryList(@Path("cat") String a, @Query("page") int b);
    * }
    * </pre>
    */
   @SuppressWarnings("unchecked") // Single-interface proxy creation guarded by parameter safety.
   public <T> T create(final Class<T> service) {
-    validateServiceInterface(service);
+    validateServiceInterface(service); //验证接口的有效性，也就是验证开发者写的Api Service的格式对不对
+    //这个方法也就是返回一个
     return (T)
         Proxy.newProxyInstance(
-            service.getClassLoader(),
-            new Class<?>[] {service},
+            service.getClassLoader(), //传入Service的classLoader，方便JVM进行类的加载
+            new Class<?>[] {service}, //需要实现的Interface数组
+                //真正的代理对象，外面调用到的就是invoke的实现
             new InvocationHandler() {
               private final Platform platform = Platform.get();
               private final Object[] emptyArgs = new Object[0];
@@ -150,20 +135,25 @@ public final class Retrofit {
               @Override
               public @Nullable Object invoke(Object proxy, Method method, @Nullable Object[] args)
                   throws Throwable {
-                // If the method is a method from Object then defer to normal invocation.
+                // 如果该方法是Object中的方法，就直接执行普通调用
+                // 因为所有的类都是继承Object的，例如equals、hashCode这些方法是不需要代理的
                 if (method.getDeclaringClass() == Object.class) {
                   return method.invoke(this, args);
                 }
-                args = args != null ? args : emptyArgs;
-                return platform.isDefaultMethod(method)
+                args = args != null ? args : emptyArgs; //方法参数
+                return platform.isDefaultMethod(method) //java8支持的接口中方法的默认实现
                     ? platform.invokeDefaultMethod(method, service, proxy, args)
-                    : loadServiceMethod(method).invoke(args);
+                    : loadServiceMethod(method).invoke(args); //这里可以看到，最后开发者对于ApiService.getUser()这样的调用，其实就是对于ServiceMethod.invoke()方法的调用
               }
             });
   }
 
+  /**
+   * 验证Service的格式
+   * @param service
+   */
   private void validateServiceInterface(Class<?> service) {
-    if (!service.isInterface()) {
+    if (!service.isInterface()) { //必须是Java interface
       throw new IllegalArgumentException("API declarations must be interfaces.");
     }
 
@@ -171,7 +161,7 @@ public final class Retrofit {
     check.add(service);
     while (!check.isEmpty()) {
       Class<?> candidate = check.removeFirst();
-      if (candidate.getTypeParameters().length != 0) {
+      if (candidate.getTypeParameters().length != 0) { //这个service本身不能带泛型参数
         StringBuilder message =
             new StringBuilder("Type parameters are unsupported on ").append(candidate.getName());
         if (candidate != service) {
@@ -182,18 +172,25 @@ public final class Retrofit {
       Collections.addAll(check, candidate.getInterfaces());
     }
 
-    if (validateEagerly) {
+    if (validateEagerly) { //尽早验证参数的有效性，并且解析方法，提前缓存ServiceMethod对象
       Platform platform = Platform.get();
       for (Method method : service.getDeclaredMethods()) {
+        //1.方法不能有默认实现
+        //2.不能是静态方法
         if (!platform.isDefaultMethod(method) && !Modifier.isStatic(method.getModifiers())) {
-          loadServiceMethod(method);
+          loadServiceMethod(method); //预加载
         }
       }
     }
   }
 
+  /**
+   * 加载ServiceMethod，如果缓存中已经有了，就从缓存中拿出来。如果是新方法，就执行相应的封装，返回一个ServiceMethod。
+   * @param method Api Service中声明的方法
+   * @return
+   */
   ServiceMethod<?> loadServiceMethod(Method method) {
-    ServiceMethod<?> result = serviceMethodCache.get(method);
+    ServiceMethod<?> result = serviceMethodCache.get(method);// 缓存的key是method，value是封装的ServiceMethod
     if (result != null) return result;
 
     synchronized (serviceMethodCache) {
@@ -228,8 +225,7 @@ public final class Retrofit {
   }
 
   /**
-   * Returns the {@link CallAdapter} for {@code returnType} from the available {@linkplain
-   * #callAdapterFactories() factories}.
+   * 从用户创建的callAdapterFactories中根据returnType返回一个合适的CallAdapter
    *
    * @throws IllegalArgumentException if no call adapter available for {@code type}.
    */
@@ -238,24 +234,27 @@ public final class Retrofit {
   }
 
   /**
-   * Returns the {@link CallAdapter} for {@code returnType} from the available {@linkplain
-   * #callAdapterFactories() factories} except {@code skipPast}.
    *
-   * @throws IllegalArgumentException if no call adapter available for {@code type}.
+   * 根据传入的{@param returnType}来匹配到对应的Adapter,返回这个CallAdapter。
+   * 系统默认情况下是传入了一个{@link DefaultCallAdapterFactory}进去的，它接受的是Object,所以它其实对任何类型都是适用的。
+   *
+   * @param skipPast 是否要跳过某个CallAdapter.
+   * @throws IllegalArgumentException 对于returnType没有合适的CallAdapter.
    */
   public CallAdapter<?, ?> nextCallAdapter(
       @Nullable CallAdapter.Factory skipPast, Type returnType, Annotation[] annotations) {
     Objects.requireNonNull(returnType, "returnType == null");
     Objects.requireNonNull(annotations, "annotations == null");
 
-    int start = callAdapterFactories.indexOf(skipPast) + 1;
+    int start = callAdapterFactories.indexOf(skipPast) + 1; //会把skipPast前面的都跳过
     for (int i = start, count = callAdapterFactories.size(); i < count; i++) {
+      //这里其实是依赖各个CallAdapter的实现自己要去根据returnType做判断，看是不是自己想要的类型，然后才返回CallAdapter的实例
       CallAdapter<?, ?> adapter = callAdapterFactories.get(i).get(returnType, annotations, this);
       if (adapter != null) {
         return adapter;
       }
     }
-
+    //没找到对应的callAdapter，下面都是报错信息
     StringBuilder builder =
         new StringBuilder("Could not locate call adapter for ").append(returnType).append(".\n");
     if (skipPast != null) {
@@ -425,11 +424,17 @@ public final class Retrofit {
    * optional.
    */
   public static final class Builder {
+    //平台类型对象（Android、Java）
     private final Platform platform;
+    // 网络请求工厂类，默认使用OkHttpCall（工厂方法模式）
     private @Nullable okhttp3.Call.Factory callFactory;
+    // 网络请求的url地址
     private @Nullable HttpUrl baseUrl;
+    // 数据转换器工厂的集合
     private final List<Converter.Factory> converterFactories = new ArrayList<>();
+    // 网络请求适配器工厂的集合，默认是DefaultCallAdapterFactory
     private final List<CallAdapter.Factory> callAdapterFactories = new ArrayList<>();
+    // 回调方法执行器，在Android上默认是封装了handler的MainThreadExecutor，默认作用是：切换线程（子线程 -> 主线程）
     private @Nullable Executor callbackExecutor;
     private boolean validateEagerly;
 
@@ -487,7 +492,7 @@ public final class Retrofit {
     }
 
     /**
-     * Set the API base URL.
+     * 设置base Url
      *
      * @see #baseUrl(HttpUrl)
      */
@@ -513,22 +518,22 @@ public final class Retrofit {
      * value using {@link HttpUrl#resolve(String)}. The behavior of this matches that of an {@code
      * <a href="">} link on a website resolving on the current URL.
      *
-     * <p><b>Base URLs should always end in {@code /}.</b>
+     * baseURL应该以反斜杠(/)结尾。
      *
      * <p>A trailing {@code /} ensures that endpoints values which are relative paths will correctly
      * append themselves to a base which has path components.
      *
-     * <p><b>Correct:</b><br>
-     * Base URL: http://example.com/api/<br>
+     * 正确的例子：
+     * Base URL: http://example.com/api/
      * Endpoint: foo/bar/<br>
      * Result: http://example.com/api/foo/bar/
      *
-     * <p><b>Incorrect:</b><br>
-     * Base URL: http://example.com/api<br>
+     * 错误的例子：
+     * Base URL: http://example.com/api
      * Endpoint: foo/bar/<br>
      * Result: http://example.com/foo/bar/
      *
-     * <p>This method enforces that {@code baseUrl} has a trailing {@code /}.
+     * 这个函数强制要求了baseUrl必须以/结尾。
      *
      * <p><b>Endpoint values which contain a leading {@code /} are absolute.</b>
      *
@@ -613,7 +618,7 @@ public final class Retrofit {
     }
 
     /**
-     * Create the {@link Retrofit} instance using the configured values.
+     * 创建Retrofit实例
      *
      * <p>Note: If neither {@link #client} nor {@link #callFactory} is called a default {@link
      * OkHttpClient} will be created and used.
@@ -622,7 +627,7 @@ public final class Retrofit {
       if (baseUrl == null) {
         throw new IllegalStateException("Base URL required.");
       }
-
+      //如果没有设置client（也是callFactory）或者是callFactory的话，默认使用OkHttpClient
       okhttp3.Call.Factory callFactory = this.callFactory;
       if (callFactory == null) {
         callFactory = new OkHttpClient();
@@ -633,18 +638,18 @@ public final class Retrofit {
         callbackExecutor = platform.defaultCallbackExecutor();
       }
 
-      // Make a defensive copy of the adapters and add the default Call adapter.
+      // 默认的适配器添加在尾部.
       List<CallAdapter.Factory> callAdapterFactories = new ArrayList<>(this.callAdapterFactories);
       callAdapterFactories.addAll(platform.defaultCallAdapterFactories(callbackExecutor));
 
-      // Make a defensive copy of the converters.
+      // 默认是不会转换的
       List<Converter.Factory> converterFactories =
           new ArrayList<>(
               1 + this.converterFactories.size() + platform.defaultConverterFactoriesSize());
 
       // Add the built-in converter factory first. This prevents overriding its behavior but also
       // ensures correct behavior when using converters that consume all types.
-      converterFactories.add(new BuiltInConverters());
+      converterFactories.add(new BuiltInConverters()); //内建的Converter加在最前面
       converterFactories.addAll(this.converterFactories);
       converterFactories.addAll(platform.defaultConverterFactories());
 

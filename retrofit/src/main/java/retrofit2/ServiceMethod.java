@@ -21,10 +21,17 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import javax.annotation.Nullable;
 
+/**
+ * ServiceMethod本身是一个抽象类，这个方法其实是对其请求和Service中声明的method的封装。
+ * 它的主要作用是解析method上的注解
+ * @param <T>
+ */
 abstract class ServiceMethod<T> {
   static <T> ServiceMethod<T> parseAnnotations(Retrofit retrofit, Method method) {
+    //解析请求参数
     RequestFactory requestFactory = RequestFactory.parseAnnotations(retrofit, method);
-
+    //解析返回类型，这里的类型是Call<User>这种，带有泛型参数的
+    //这里解析出来的返回类型只用于格式验证
     Type returnType = method.getGenericReturnType();
     if (Utils.hasUnresolvableType(returnType)) {
       throw methodError(

@@ -21,64 +21,56 @@ import java.lang.reflect.Type;
 import javax.annotation.Nullable;
 
 /**
- * Adapts a {@link Call} with response type {@code R} into the type of {@code T}. Instances are
- * created by {@linkplain Factory a factory} which is {@linkplain
- * Retrofit.Builder#addCallAdapterFactory(Factory) installed} into the {@link Retrofit} instance.
+ * 将Call<R>转换成Call<T>.
  */
 public interface CallAdapter<R, T> {
   /**
-   * Returns the value type that this adapter uses when converting the HTTP response body to a Java
-   * object. For example, the response type for {@code Call<Repo>} is {@code Repo}. This type is
-   * used to prepare the {@code call} passed to {@code #adapt}.
+   * 返回此适配器将HTTP响应主体转换为Java对象时使用的值类型。
+   * 例如，Call<Repo>的响应类型为Repo。此类型用于准备传递给#adapt的调用。
+   * 这个类型将被Call用来传递给adapt()方法。
    *
-   * <p>Note: This is typically not the same type as the {@code returnType} provided to this call
-   * adapter's factory.
+   * 注意：此类型通常与提供给此CallAdapter.Factory的returnType不同。
    */
   Type responseType();
 
   /**
-   * Returns an instance of {@code T} which delegates to {@code call}.
+   * 返回委托给Call的T的实例，实际上就执行真正的转换方法。
    *
-   * <p>For example, given an instance for a hypothetical utility, {@code Async}, this instance
-   * would return a new {@code Async<R>} which invoked {@code call} when run.
+   * 例如，给定假设的实用程序Async的实例，该实例将返回一个新的Async <R>，该Async <R>在运行时会调用该调用。
    *
-   * <pre><code>
-   * &#64;Override
-   * public &lt;R&gt; Async&lt;R&gt; adapt(final Call&lt;R&gt; call) {
-   *   return Async.create(new Callable&lt;Response&lt;R&gt;&gt;() {
-   *     &#64;Override
-   *     public Response&lt;R&gt; call() throws Exception {
-   *       return call.execute();
-   *     }
-   *   });
-   * }
-   * </code></pre>
+   * 例如，以下方法实例会把Call<R>转换成Async<R>
+   *
+   * @Override
+   *  public <R> Async<R> adapt(final Call<R> call) {
+   *    return Async.create(new Callable<Response<R>>() {
+   *      @Override
+   *      public Response<R> call() throws Exception {
+   *        return call.execute();
+   *      }
+   *    });
+   *  }
    */
   T adapt(Call<R> call);
 
   /**
-   * Creates {@link CallAdapter} instances based on the return type of {@linkplain
-   * Retrofit#create(Class) the service interface} methods.
+   * 根据Retrofit.create(class)方法的返回类型来创建CallAdapter实例
    */
   abstract class Factory {
     /**
-     * Returns a call adapter for interface methods that return {@code returnType}, or null if it
-     * cannot be handled by this factory.
+     * 根据{returnType}创建合适的CallAdapter，如果returnType不是自己想处理的类型，就返回null。
      */
     public abstract @Nullable CallAdapter<?, ?> get(
         Type returnType, Annotation[] annotations, Retrofit retrofit);
 
     /**
-     * Extract the upper bound of the generic parameter at {@code index} from {@code type}. For
-     * example, index 1 of {@code Map<String, ? extends Runnable>} returns {@code Runnable}.
+     * 获取泛型参数的顶级类型，例如传入(1, Map<String, ? extend Runnable>)返回的是Runnable.
      */
     protected static Type getParameterUpperBound(int index, ParameterizedType type) {
       return Utils.getParameterUpperBound(index, type);
     }
 
     /**
-     * Extract the raw class type from {@code type}. For example, the type representing {@code
-     * List<? extends Runnable>} returns {@code List.class}.
+     * 返回type的原始类型，例如List<? extends Runnable>返回的是List.class
      */
     protected static Class<?> getRawType(Type type) {
       return Utils.getRawType(type);

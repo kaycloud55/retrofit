@@ -26,21 +26,23 @@ import javax.annotation.Nullable;
 import kotlin.coroutines.Continuation;
 import okhttp3.ResponseBody;
 
-/** Adapts an invocation of an interface method into an HTTP call. */
+/** ServiceMethod的具体实现，也是动态代理的具体的实现，执行请求的时候实际上就是调用它的invoke方法.
+ *  而HttpServiceMethod本身也是抽象类，具体返回的是哪个实现类由它的parseAnnotations方法返回
+ */
 abstract class HttpServiceMethod<ResponseT, ReturnT> extends ServiceMethod<ReturnT> {
   /**
-   * Inspects the annotations on an interface method to construct a reusable service method that
-   * speaks HTTP. This requires potentially-expensive reflection so it is best to build each service
-   * method only once and reuse it.
+   * 解析方法上的注释，读取参数，构造成http请求. 这个调用依赖于反射，所以不应该只调用一次，然后重用它。
+   * 重用其实就是通过Retrofit.methodCache来实现的。
    */
   static <ResponseT, ReturnT> HttpServiceMethod<ResponseT, ReturnT> parseAnnotations(
       Retrofit retrofit, Method method, RequestFactory requestFactory) {
-    boolean isKotlinSuspendFunction = requestFactory.isKotlinSuspendFunction;
+    boolean isKotlinSuspendFunction = requestFactory.isKotlinSuspendFunction; //kotlin协程相关
     boolean continuationWantsResponse = false;
     boolean continuationBodyNullable = false;
 
     Annotation[] annotations = method.getAnnotations();
     Type adapterType;
+    //为kotlin的协程方法设计
     if (isKotlinSuspendFunction) {
       Type[] parameterTypes = method.getGenericParameterTypes();
       Type responseType =
@@ -60,9 +62,11 @@ abstract class HttpServiceMethod<ResponseT, ReturnT> extends ServiceMethod<Retur
       adapterType = new Utils.ParameterizedTypeImpl(null, Call.class, responseType);
       annotations = SkipCallbackExecutorImpl.ensurePresent(annotations);
     } else {
+      //这里的adapterType也就是类似Call<User>中的User这样的
       adapterType = method.getGenericReturnType();
     }
-
+    //转换request，根据adapterType去找合适的CallAdapter。
+    //注意，如果我们没有设置RxjavaCallAdapter或者是LiveDataCallAdapter之类的话，应该就是返回defaultCallAdapter.
     CallAdapter<ResponseT, ReturnT> callAdapter =
         createCallAdapter(retrofit, method, adapterType, annotations);
     Type responseType = callAdapter.responseType();
@@ -80,11 +84,12 @@ abstract class HttpServiceMethod<ResponseT, ReturnT> extends ServiceMethod<Retur
     if (requestFactory.httpMethod.equals("HEAD") && !Void.class.equals(responseType)) {
       throw methodError(method, "HEAD method must use Void as response type.");
     }
-
+    //根据responseType去找合适的Converter
     Converter<ResponseBody, ResponseT> responseConverter =
         createResponseConverter(retrofit, method, responseType);
-
+    //构建OkHttp Call
     okhttp3.Call.Factory callFactory = retrofit.callFactory;
+    //普通的请求，非kotlin协程的，就是在CallAdapted实现的
     if (!isKotlinSuspendFunction) {
       return new CallAdapted<>(requestFactory, callFactory, responseConverter, callAdapter);
     } else if (continuationWantsResponse) {
@@ -107,16 +112,34 @@ abstract class HttpServiceMethod<ResponseT, ReturnT> extends ServiceMethod<Retur
     }
   }
 
+  /**
+   * 根据returnType找到合适的CallAdapter
+   * @param retrofit 客户端创建的retrofit实例
+   * @param method 调用的apiService中的请求方法
+   * @param returnType 方法的具体返回的结果类型，实参
+   * @param annotations 方法上面的注解
+   * @param <ResponseT> http请求传来的响应体的类型
+   * @param <ReturnT> CallAdapter经过处理后的返回类型
+   * @return
+   */
   private static <ResponseT, ReturnT> CallAdapter<ResponseT, ReturnT> createCallAdapter(
       Retrofit retrofit, Method method, Type returnType, Annotation[] annotations) {
     try {
+      //找到合适的CallAdapter
       //noinspection unchecked
       return (CallAdapter<ResponseT, ReturnT>) retrofit.callAdapter(returnType, annotations);
     } catch (RuntimeException e) { // Wide exception range because factories are user code.
       throw methodError(method, e, "Unable to create call adapter for %s", returnType);
     }
   }
-
+  /**
+   * 根据responseType找到合适的ResponseConverter
+   * @param retrofit
+   * @param method
+   * @param responseType
+   * @param <ResponseT>
+   * @return
+   */
   private static <ResponseT> Converter<ResponseBody, ResponseT> createResponseConverter(
       Retrofit retrofit, Method method, Type responseType) {
     Annotation[] annotations = method.getAnnotations();
@@ -140,14 +163,31 @@ abstract class HttpServiceMethod<ResponseT, ReturnT> extends ServiceMethod<Retur
     this.responseConverter = responseConverter;
   }
 
+  /**
+   * 发送请求
+   * @param args 参数也就是ApiService中声明的方法的参数
+   * @return 具体的返回类型由adapt实现，是经过Converter转换过的
+   */
   @Override
   final @Nullable ReturnT invoke(Object[] args) {
+    //这里的OkHttpCall是对OkHttp的Call进行了一层封装的
     Call<ResponseT> call = new OkHttpCall<>(requestFactory, args, callFactory, responseConverter);
     return adapt(call, args);
   }
 
+  /**
+   * 真正发送请求，读取响应
+   * @param call
+   * @param args
+   * @return
+   */
   protected abstract @Nullable ReturnT adapt(Call<ResponseT> call, Object[] args);
 
+  /**
+   * 普通的异步请求
+   * @param <ResponseT>
+   * @param <ReturnT>
+   */
   static final class CallAdapted<ResponseT, ReturnT> extends HttpServiceMethod<ResponseT, ReturnT> {
     private final CallAdapter<ResponseT, ReturnT> callAdapter;
 
@@ -195,6 +235,10 @@ abstract class HttpServiceMethod<ResponseT, ReturnT> extends ServiceMethod<Retur
     }
   }
 
+  /**
+   * MethodService的一个具体实现类
+   * @param <ResponseT>
+   */
   static final class SuspendForBody<ResponseT> extends HttpServiceMethod<ResponseT, Object> {
     private final CallAdapter<ResponseT, Call<ResponseT>> callAdapter;
     private final boolean isNullable;

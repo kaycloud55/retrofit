@@ -133,9 +133,7 @@ final class RequestFactory {
   }
 
   /**
-   * Inspects the annotations on an interface method to construct a reusable service method. This
-   * requires potentially-expensive reflection so it is best to build each service method only once
-   * and reuse it. Builders cannot be reused.
+   * 解析method上的注解，以此来构造一个可重用的请求参数列表. 这个过程需要用到反射，所以最好是对每个method只解析一次，然后缓存起来。
    */
   static final class Builder {
     // Upper and lower characters, digits, underscores, and hyphens, starting with a character.
@@ -145,9 +143,9 @@ final class RequestFactory {
 
     final Retrofit retrofit;
     final Method method;
-    final Annotation[] methodAnnotations;
-    final Annotation[][] parameterAnnotationsArray;
-    final Type[] parameterTypes;
+    final Annotation[] methodAnnotations; //方法上声明的各种注解，会解析成注解的数组
+    final Annotation[][] parameterAnnotationsArray; //对参数的注解
+    final Type[] parameterTypes; //方法上的泛型参数类型
 
     boolean gotField;
     boolean gotPart;
@@ -186,6 +184,7 @@ final class RequestFactory {
       }
 
       if (!hasBody) {
+        //分段请求
         if (isMultipart) {
           throw methodError(
               method,
@@ -222,6 +221,10 @@ final class RequestFactory {
       return new RequestFactory(this);
     }
 
+    /**
+     * 解析方法上声明的注解
+     * @param annotation
+     */
     private void parseMethodAnnotation(Annotation annotation) {
       if (annotation instanceof DELETE) {
         parseHttpMethodAndPath("DELETE", ((DELETE) annotation).value(), false);
@@ -259,8 +262,14 @@ final class RequestFactory {
       }
     }
 
+    /**
+     * 解析请求方法 HEAD/POST/GET.....
+     * @param httpMethod 请求方法类型
+     * @param value 请求方法携带的value
+     * @param hasBody 是否有请求体
+     */
     private void parseHttpMethodAndPath(String httpMethod, String value, boolean hasBody) {
-      if (this.httpMethod != null) {
+      if (this.httpMethod != null) { //必须只能有一个请求方法
         throw methodError(
             method,
             "Only one HTTP method is allowed. Found: %s and %s.",

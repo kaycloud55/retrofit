@@ -20,15 +20,13 @@ import okhttp3.Request;
 import okio.Timeout;
 
 /**
- * An invocation of a Retrofit method that sends a request to a webserver and returns a response.
- * Each call yields its own HTTP request and response pair. Use {@link #clone} to make multiple
- * calls with the same parameters to the same webserver; this may be used to implement polling or to
- * retry a failed call.
+ * 对Retrofit方法的调用，该方法将请求发送到Web服务器并返回响应。
+ * 每个调用都会产生自己的HTTP请求和响应对。
+ * 使用clone（）对相同的Web服务器进行具有相同参数的多个调用；这可用于实施轮询或重试失败的呼叫。
  *
- * <p>Calls may be executed synchronously with {@link #execute}, or asynchronously with {@link
- * #enqueue}. In either case the call can be canceled at any time with {@link #cancel}. A call that
- * is busy writing its request or reading its response may receive a {@link IOException}; this is
- * working as designed.
+ * 可以execute（）来进行同步执行，也可以使用enqueue（retrofit2.Callback
+ * <T>）异步执行。无论哪种情况，都可以使用cancel（）随时取消请求。
+ * 正在写请求或读取其响应的调用可能会收到IOException；这是按设计工作。
  *
  * @param <T> Successful response body type.
  */
