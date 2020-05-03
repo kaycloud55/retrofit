@@ -21,7 +21,7 @@ import java.lang.reflect.Type;
 import javax.annotation.Nullable;
 
 /**
- * 将Call<R>转换成Call<T>.
+ * 将Call<R>转换成T。具体怎么转需要自己处理，也就是Retrofit会把Call<R>给你，然后你自己去发送请求，处理响应
  */
 public interface CallAdapter<R, T> {
   /**

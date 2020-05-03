@@ -30,6 +30,10 @@ import okio.ForwardingSource;
 import okio.Okio;
 import okio.Timeout;
 
+/**
+ * 默认的Call的实现，可以自己定义CallFactory的实现，如果没有就会使用这个默认的
+ * @param <T>
+ */
 final class OkHttpCall<T> implements Call<T> {
   private final RequestFactory requestFactory;
   private final Object[] args;
@@ -83,8 +87,7 @@ final class OkHttpCall<T> implements Call<T> {
   }
 
   /**
-   * Returns the raw call, initializing it if necessary. Throws if initializing the raw call throws,
-   * or has thrown in previous attempts to create it.
+   * 返回原始的请求，也就是OkHttp3的call
    */
   @GuardedBy("this")
   private okhttp3.Call getRawCall() throws IOException {
@@ -238,6 +241,7 @@ final class OkHttpCall<T> implements Call<T> {
       return Response.success(null, rawResponse);
     }
 
+    //对请求结果进行转换
     ExceptionCatchingResponseBody catchingBody = new ExceptionCatchingResponseBody(rawBody);
     try {
       T body = responseConverter.convert(catchingBody);

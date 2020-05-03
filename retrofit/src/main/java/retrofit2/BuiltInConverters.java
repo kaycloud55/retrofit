@@ -25,20 +25,23 @@ import okhttp3.ResponseBody;
 import retrofit2.http.Streaming;
 
 final class BuiltInConverters extends Converter.Factory {
-  /** Not volatile because we don't mind multiple threads discovering this. */
+  /** 不需要使用volatile，因为多线程并发也不会存在问题 */
   private boolean checkForKotlinUnit = true;
 
   @Override
   public @Nullable Converter<ResponseBody, ?> responseBodyConverter(
       Type type, Annotation[] annotations, Retrofit retrofit) {
     if (type == ResponseBody.class) {
+      //是网络数据还是buffer数据
       return Utils.isAnnotationPresent(annotations, Streaming.class)
           ? StreamingResponseBodyConverter.INSTANCE
           : BufferingResponseBodyConverter.INSTANCE;
     }
     if (type == Void.class) {
+      //直接返回void
       return VoidResponseBodyConverter.INSTANCE;
     }
+    // kotlin unit，对应Void
     if (checkForKotlinUnit) {
       try {
         if (type == Unit.class) {
